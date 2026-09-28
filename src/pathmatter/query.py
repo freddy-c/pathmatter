@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .documents import read_document
+from .filters import FilterError, matches, uses_only_system_fields, validate_filter
 from .patterns import PathPattern, PatternError, validate_relative_directory
 
 
@@ -16,7 +17,8 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
     """Return Markdown documents selected by a JSON-compatible query object."""
     if not isinstance(query, Mapping):
         raise QueryError("query must be a JSON object")
-    unknown = set(query) - {"path", "scope", "includeBody", "includeAbsolutePath"}
+    allowed = {"path", "scope", "where", "includeBody", "includeAbsolutePath"}
+    unknown = set(query) - allowed
     if unknown:
         raise QueryError(f"unsupported query keys: {', '.join(sorted(unknown))}")
     path_pattern = query.get("path")
@@ -42,6 +44,13 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
     for name in ("includeBody", "includeAbsolutePath"):
         if name in query and not isinstance(query[name], bool):
             raise QueryError(f"{name} must be a boolean")
+    where = query.get("where", {})
+    if "where" in query and (not isinstance(where, Mapping) or not where):
+        raise QueryError("where must be a non-empty object")
+    try:
+        validate_filter(where)
+    except FilterError as error:
+        raise QueryError(str(error)) from error
 
     root = Path(vault_root)
     if root.is_symlink() or not root.is_dir():
@@ -81,5 +90,22 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
                 include_absolute_path=query.get("includeAbsolutePath", False),
             )
             document["params"] = captures
+            if not _matches_where(document, relative, captures, where):
+                continue
             documents.append(document)
     return sorted(documents, key=lambda document: document["path"])
+
+
+def _matches_where(document, path, captures, where):
+    if not where:
+        return True
+    if document["diagnostics"] and not uses_only_system_fields(where):
+        return False
+    segments = path.split("/")
+    location = {
+        "$path": path,
+        "$directory": "/".join(segments[:-1]),
+        "$filename": segments[-1],
+        **{f"$params.{name}": value for name, value in captures.items()},
+    }
+    return matches({**document["frontmatter"], **location}, where)

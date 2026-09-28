@@ -12,7 +12,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pathmatter")
     commands = parser.add_subparsers(dest="command", required=True)
     query_parser = commands.add_parser(
-        "query", help="query Markdown documents in a vault"
+        "query", help="query Markdown documents by path and frontmatter"
     )
     query_parser.add_argument("vault", type=Path)
     source = query_parser.add_mutually_exclusive_group(required=True)

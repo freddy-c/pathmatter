@@ -13,22 +13,34 @@ pathmatter query ./my-vault --query-file - < query.json
 ```
 
 The same interface is available from Python as `query_documents(vault_root, query)`.
-Supported keys in this first slice are `path`, `scope`, `includeBody`, and
-`includeAbsolutePath`. For example:
+Supported keys are `path`, `scope`, `where`, `includeBody`, and
+`includeAbsolutePath`. `where` uses a MongoDB-inspired filter subset: equality,
+`$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$exists`, `$and`,
+`$or`, `$not`, and `$elemMatch`. Dotted paths read nested YAML mappings, while
+flat properties continue to work normally. For example:
 
 ```json
 {
   "path": "**/tasks/*.md",
   "scope": {"directory": "modules/x", "mode": "descendants"},
+  "where": {"status": {"$ne": "done"}, "priority": {"$gte": 2}},
   "includeBody": true
 }
 ```
 
+Array values support scalar membership (`{"tags": "math"}`), and `$elemMatch`
+requires all nested conditions to match the same array item. `$exists` distinguishes
+a missing property from an explicit YAML `null`; `$ne` and `$nin` also match missing
+properties. Numeric comparisons do not convert strings to numbers. Location fields
+include `$path`, `$directory`, `$filename`, and captured `$params.<name>` values.
+Malformed frontmatter remains discoverable by path and can still be filtered by
+location, but does not match predicates that require frontmatter.
+
 `scope.mode` can be `children` for only immediate Markdown files or `descendants`
 for all nested Markdown files (the default). Paths always include `.md` and use `/`
 separators. Results are ordered by path and contain `path`, `params`,
-`frontmatter`, and `diagnostics`; `body` and `absolutePath` are opt-in. Predicates,
-projection, sorting, and writes are planned for later slices.
+`frontmatter`, and `diagnostics`; `body` and `absolutePath` are opt-in. Projection,
+sorting, and writes are planned for later slices.
 
 ## Development
 

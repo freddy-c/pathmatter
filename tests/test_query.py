@@ -54,6 +54,10 @@ class QueryTests(unittest.TestCase):
             "---\ntitle: Project\ncreated: 2026-09-28\n---\n# Body\n",
         )
         self.write("modules/x/tasks/one.md", "---\nstatus: active\n---\nFirst\n")
+        self.write(
+            "modules/x/tasks/nested-fields.md",
+            "---\ntitle: Nested\nteacher:\n  name: Ada\nscore: 3\ntags: [math, logic]\nsteps:\n  - kind: read\n    done: true\n  - kind: write\n    done: false\nvalues: [1, 2]\nmissingNull: null\n---\nNested body\n",
+        )
         self.write("modules/x/tasks/nested/two.md", "No frontmatter\n")
         self.write(
             "modules/x/tasks/bad.md", "---\nstatus: [broken\n---\nStill readable\n"
@@ -106,15 +110,16 @@ class QueryTests(unittest.TestCase):
             [item["path"] for item in result],
             [
                 "modules/x/tasks/bad.md",
+                "modules/x/tasks/nested-fields.md",
                 "modules/x/tasks/one.md",
                 "modules/x/tasks/scalar.md",
                 "modules/x/tasks/unclosed.md",
             ],
         )
         self.assertEqual(result[0]["diagnostics"][0]["code"], "frontmatter_parse_error")
-        self.assertEqual(result[1]["frontmatter"], {"status": "active"})
-        self.assertEqual(result[2]["diagnostics"][0]["code"], "frontmatter_parse_error")
+        self.assertEqual(result[2]["frontmatter"], {"status": "active"})
         self.assertEqual(result[3]["diagnostics"][0]["code"], "frontmatter_parse_error")
+        self.assertEqual(result[4]["diagnostics"][0]["code"], "frontmatter_parse_error")
         self.assertNotIn("body", result[0])
 
     def test_scope_mode_and_absent_frontmatter(self):
@@ -146,6 +151,35 @@ class QueryTests(unittest.TestCase):
                 query_documents(self.root, query)
         with self.assertRaises(QueryError):
             query_documents(self.root, {"scope": {"directory": "modules/x/linked-dir"}})
+
+    def test_mongodb_style_predicates(self):
+        def paths(where):
+            return [item["path"] for item in query_documents(self.root, {"where": where})]
+
+        target = "modules/x/tasks/nested-fields.md"
+        self.assertEqual(paths({"teacher.name": "Ada"}), [target])
+        self.assertEqual(paths({"score": {"$gte": 3}}), [target])
+        self.assertEqual(paths({"tags": "math"}), [target])
+        self.assertEqual(paths({"values": {"$in": [2, 4]}}), [target])
+        self.assertEqual(paths({"steps": {"$elemMatch": {"kind": "write", "done": False}}}), [target])
+        self.assertEqual(paths({"steps": {"$elemMatch": {"kind": "read", "done": False}}}), [])
+        self.assertEqual(paths({"$and": [{"score": {"$gt": 2}}, {"$or": [{"title": "Nested"}, {"title": "Other"}]}]}), [target])
+        self.assertNotIn(target, paths({"$not": {"title": "Nested"}}))
+        self.assertEqual(paths({"missingNull": None}), [target])
+        self.assertEqual(paths({"absent": None}), [])
+        self.assertIn(target, paths({"absent": {"$ne": "x"}}))
+        self.assertEqual(paths({"score": {"$gte": "3"}}), [])
+        self.assertEqual(query_documents(self.root, {"path": "modules/{module}/tasks/nested-fields.md", "where": {"$params.module": "x", "$filename": "nested-fields.md", "$directory": "modules/x/tasks"}})[0]["path"], target)
+
+    def test_bad_frontmatter_only_matches_system_filters(self):
+        system = query_documents(self.root, {"path": "**/bad.md", "where": {"$filename": "bad.md"}})
+        self.assertEqual(len(system), 1)
+        self.assertEqual(query_documents(self.root, {"path": "**/bad.md", "where": {"status": {"$ne": "done"}}}), [])
+
+    def test_rejects_unsupported_filter_shapes(self):
+        for where in ({"$wat": []}, {"score": {"$in": "not-an-array"}}, {"$or": {"x": 1}}, {"x": {"$exists": 1}}):
+            with self.subTest(where=where), self.assertRaises(QueryError):
+                query_documents(self.root, {"where": where})
 
     def test_cli_json_query(self):
         command = [
