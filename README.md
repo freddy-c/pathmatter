@@ -82,6 +82,36 @@ array of documents with diagnostics. It exits with status 1 when violations are
 found, 0 when the vault passes, and 2 for invalid configuration or arguments.
 The Python equivalent is `validate_vault(vault_root)`.
 
+## Creating and updating documents
+
+Create a Markdown document from explicit frontmatter. `body` is optional and
+defaults to an empty string; missing parent directories are created after the
+proposed document passes its path rules and schemas.
+
+```sh
+pathmatter preview ./my-vault --input '{"operation":"create","path":"projects/demo/project.md","frontmatter":{"title":"Demo","status":"planned"}}'
+pathmatter create ./my-vault --input '{"path":"projects/demo/project.md","frontmatter":{"title":"Demo","status":"planned"}}'
+```
+
+Update frontmatter with MongoDB-style `$set` and `$unset`. Dotted names address
+nested properties. The tool reads the current file when the command runs, so
+edits made in Obsidian are included. Omitting `body` preserves the Markdown body;
+include it only when you intend to replace the body.
+
+```sh
+pathmatter preview ./my-vault --input '{"operation":"update","path":"projects/demo/project.md","update":{"$set":{"status":"active"}}}'
+pathmatter update ./my-vault --input '{"path":"projects/demo/project.md","update":{"$set":{"status":"active"},"$unset":{"oldField":""}}}'
+```
+
+All three commands also accept `--input-file request.json` or
+`--input-file -` for standard input. A preview shows the resulting path,
+frontmatter, body, and diagnostics without writing. Creates reject occupied
+paths; updates require an existing file with parseable frontmatter. Both run
+validation before writing. In Python, use `preview_document`,
+`create_document`, and `update_document` from `pathmatter` with the same request
+objects. Patch operations may reformat YAML frontmatter, while an omitted body
+is preserved.
+
 ## Development
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). This project targets the latest stable Python 3.14 patch release. From the project root, install Python and create the environment:

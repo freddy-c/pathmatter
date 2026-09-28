@@ -25,7 +25,12 @@ def _json_value(value: object) -> object:
 
 
 def read_document(
-    path: Path, relative_path: str, *, include_body: bool, include_absolute_path: bool
+    path: Path,
+    relative_path: str,
+    *,
+    include_body: bool,
+    include_absolute_path: bool,
+    source: str | None = None,
 ) -> dict:
     """Read a document; parsing failures are returned as diagnostics."""
     result: dict = {
@@ -36,13 +41,14 @@ def read_document(
     }
     if include_absolute_path:
         result["absolutePath"] = str(path.absolute())
-    try:
-        source = path.read_text(encoding="utf-8-sig")
-    except (OSError, UnicodeError) as error:
-        result["diagnostics"].append({"code": "read_error", "message": str(error)})
-        if include_body:
-            result["body"] = ""
-        return result
+    if source is None:
+        try:
+            source = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeError) as error:
+            result["diagnostics"].append({"code": "read_error", "message": str(error)})
+            if include_body:
+                result["body"] = ""
+            return result
 
     lines = source.splitlines(keepends=True)
     body = source

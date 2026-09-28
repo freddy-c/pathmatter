@@ -31,6 +31,18 @@ def validate_relative_directory(value: str) -> str:
     return value
 
 
+def validate_document_path(value: str) -> str:
+    """Validate a vault-relative Markdown document path."""
+    parts = _segments(value)
+    if not parts[-1].endswith(".md"):
+        raise PatternError("document path must end in .md")
+    if "\x00" in value:
+        raise PatternError("document path must not contain NUL")
+    if ":" in value:
+        raise PatternError("document path must not contain a drive separator")
+    return value
+
+
 class PathPattern:
     """A whole-path matcher with named, single-segment captures."""
 
