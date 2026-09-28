@@ -112,6 +112,16 @@ validation before writing. In Python, use `preview_document`,
 objects. Patch operations may reformat YAML frontmatter, while an omitted body
 is preserved.
 
+Delete moves a Markdown document into `.pathmatter-trash` inside the vault. The
+response includes `trashedPath` so it can be recovered manually. Trash is excluded
+from queries and validation, and each deletion has a unique destination.
+
+```sh
+pathmatter delete ./my-vault --input '{"path":"projects/demo/project.md"}'
+```
+
+The Python equivalent is `delete_document(vault_root, {"path": "..."})`.
+
 ## Development
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). This project targets the latest stable Python 3.14 patch release. From the project root, install Python and create the environment:

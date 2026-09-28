@@ -4,6 +4,7 @@ import copy
 import os
 import stat
 import tempfile
+import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -26,6 +27,9 @@ class WriteValidationError(WriteError):
         super().__init__("document cannot be written")
 
 
+TRASH_DIRECTORY = ".pathmatter-trash"
+
+
 def _vault_root(vault_root: str | Path) -> Path:
     root = Path(vault_root)
     if root.is_symlink() or not root.is_dir():
@@ -38,6 +42,8 @@ def _target_path(root: Path, document_path: object) -> Path:
         validate_document_path(document_path)
     except PatternError as error:
         raise WriteError(str(error)) from error
+    if document_path.split("/", 1)[0] == TRASH_DIRECTORY:
+        raise WriteError("the Pathmatter trash directory is reserved")
     current = root
     parts = document_path.split("/")
     for part in parts:
@@ -283,3 +289,37 @@ def update_document(vault_root: str | Path, request: Mapping) -> dict:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
     return preview
+
+
+def delete_document(vault_root: str | Path, request: Mapping) -> dict:
+    """Move one ordinary Markdown document to recoverable vault-local trash."""
+    if not isinstance(request, Mapping) or set(request) != {"path"}:
+        raise WriteError("delete request requires only path")
+    root = _vault_root(vault_root)
+    path = request["path"]
+    target = _target_path(root, path)
+    if not target.is_file():
+        raise WriteError(f"document does not exist: {target}")
+    try:
+        original = target.read_bytes()
+    except OSError as error:
+        raise WriteError(f"cannot read document {target}: {error}") from error
+
+    trash = root / TRASH_DIRECTORY
+    if trash.is_symlink() or (trash.exists() and not trash.is_dir()):
+        raise WriteError("the Pathmatter trash path is not an ordinary directory")
+    try:
+        trash.mkdir(exist_ok=True)
+        if trash.is_symlink():
+            raise WriteError("the Pathmatter trash path is a symlink")
+        batch = trash / uuid.uuid4().hex
+        batch.mkdir()
+        destination = batch / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if target.read_bytes() != original:
+            raise WriteError(f"document changed during delete; retry: {target}")
+        _target_path(root, path)
+        os.replace(target, destination)
+    except OSError as error:
+        raise WriteError(f"cannot move document to trash {target}: {error}") from error
+    return {"path": path, "trashedPath": destination.relative_to(root).as_posix()}

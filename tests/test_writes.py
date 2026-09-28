@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from pathmatter import create_document, update_document
+from pathmatter import QueryError, create_document, delete_document, query_documents, update_document
 from pathmatter.writes import WriteError, WriteValidationError, preview_document
 
 
@@ -178,3 +178,42 @@ class WriteTests(unittest.TestCase):
         invalid = call("update", {"path": request["path"], "update": {"$unset": {"title": ""}}})
         self.assertEqual(invalid.returncode, 1)
         self.assertEqual(json.loads(invalid.stdout)["diagnostics"][0]["field"], "title")
+
+    def test_delete_moves_document_to_unique_recoverable_trash(self):
+        path = "projects/demo/project.md"
+        source = "---\ntitle: Demo\n---\n# Body\n"
+        target = self.root / path
+        target.parent.mkdir(parents=True)
+        target.write_text(source, encoding="utf-8")
+
+        first = delete_document(self.root, {"path": path})
+        self.assertFalse(target.exists())
+        self.assertEqual((self.root / first["trashedPath"]).read_text(), source)
+        self.assertEqual(query_documents(self.root, {}), [])
+        with self.assertRaises(QueryError):
+            query_documents(self.root, {"scope": {"directory": ".pathmatter-trash"}})
+
+        target.write_text(source, encoding="utf-8")
+        second = delete_document(self.root, {"path": path})
+        self.assertNotEqual(first["trashedPath"], second["trashedPath"])
+        self.assertEqual((self.root / first["trashedPath"]).read_text(), source)
+        self.assertEqual((self.root / second["trashedPath"]).read_text(), source)
+
+    def test_delete_rejects_missing_unsafe_and_symlink_paths(self):
+        (self.root / "linked.md").symlink_to(self.root / "outside.md")
+        for path in ("missing.md", "../outside.md", "linked.md", ".pathmatter-trash/x.md"):
+            with self.subTest(path=path), self.assertRaises(WriteError):
+                delete_document(self.root, {"path": path})
+        self.assertFalse((self.root / ".pathmatter-trash").exists())
+
+    def test_cli_delete_document(self):
+        target = self.root / "note.md"
+        target.write_text("Unparseable frontmatter is deletable\n", encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "pathmatter.cli", "delete", str(self.root), "--input", '{"path":"note.md"}'],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(target.exists())
+        self.assertEqual((self.root / json.loads(result.stdout)["trashedPath"]).read_text(), "Unparseable frontmatter is deletable\n")

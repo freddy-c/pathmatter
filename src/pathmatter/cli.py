@@ -11,6 +11,7 @@ from .writes import (
     WriteError,
     WriteValidationError,
     create_document,
+    delete_document,
     preview_document,
     update_document,
 )
@@ -28,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--query-file", help="JSON file, or - for standard input")
     validate_parser = commands.add_parser("validate", help="validate Markdown files in a vault")
     validate_parser.add_argument("vault", type=Path)
-    for name in ("preview", "create", "update"):
+    for name in ("preview", "create", "update", "delete"):
         write_parser = commands.add_parser(name, help=f"{name} a Markdown document")
         write_parser.add_argument("vault", type=Path)
         write_source = write_parser.add_mutually_exclusive_group(required=True)
@@ -58,6 +59,8 @@ def main(argv: list[str] | None = None) -> int:
                 result = preview_document(args.vault, request)
             elif args.command == "create":
                 result = create_document(args.vault, request)
+            elif args.command == "delete":
+                result = delete_document(args.vault, request)
             else:
                 result = update_document(args.vault, request)
     except WriteValidationError as error:

@@ -8,6 +8,7 @@ from .writes import (
     WriteError,
     WriteValidationError,
     create_document,
+    delete_document,
     preview_document,
     update_document,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "WriteError",
     "WriteValidationError",
     "create_document",
+    "delete_document",
     "preview_document",
     "query_documents",
     "update_document",

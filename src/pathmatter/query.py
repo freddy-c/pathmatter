@@ -10,6 +10,7 @@ from .documents import read_document
 from .filters import FilterError, matches, uses_only_system_fields, validate_filter
 from .patterns import PathPattern, PatternError, validate_relative_directory
 from .rules import RuleConfigError, load_rules
+from .writes import TRASH_DIRECTORY
 
 
 class QueryError(ValueError):
@@ -52,6 +53,8 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
         validate_relative_directory(directory)
     except PatternError as error:
         raise QueryError(str(error)) from error
+    if directory.split("/", 1)[0] == TRASH_DIRECTORY:
+        raise QueryError("the Pathmatter trash directory is not queryable")
     mode = scope.get("mode", "descendants")
     if mode not in ("children", "descendants"):
         raise QueryError("scope.mode must be children or descendants")
@@ -96,7 +99,10 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
     documents = []
     for parent, directories, filenames in os.walk(scoped_path, followlinks=False):
         directories[:] = sorted(
-            name for name in directories if not (Path(parent) / name).is_symlink()
+            name
+            for name in directories
+            if not (Path(parent) / name).is_symlink()
+            and not (Path(parent) == root and name == TRASH_DIRECTORY)
         )
         if mode == "children":
             directories.clear()
