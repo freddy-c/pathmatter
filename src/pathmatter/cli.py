@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .query import QueryError, query_documents
+from .validation import validate_vault
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -18,20 +19,25 @@ def main(argv: list[str] | None = None) -> int:
     source = query_parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--query", help="JSON query object")
     source.add_argument("--query-file", help="JSON file, or - for standard input")
+    validate_parser = commands.add_parser("validate", help="validate Markdown files in a vault")
+    validate_parser.add_argument("vault", type=Path)
     args = parser.parse_args(argv)
     try:
-        if args.query is not None:
-            raw = args.query
-        elif args.query_file == "-":
-            raw = sys.stdin.read()
+        if args.command == "validate":
+            result = validate_vault(args.vault)
         else:
-            raw = Path(args.query_file).read_text(encoding="utf-8")
-        result = query_documents(args.vault, json.loads(raw))
+            if args.query is not None:
+                raw = args.query
+            elif args.query_file == "-":
+                raw = sys.stdin.read()
+            else:
+                raw = Path(args.query_file).read_text(encoding="utf-8")
+            result = query_documents(args.vault, json.loads(raw))
     except (OSError, UnicodeError, json.JSONDecodeError, QueryError) as error:
         parser.error(str(error))
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
-    return 0
+    return 1 if args.command == "validate" and result else 0
 
 
 if __name__ == "__main__":

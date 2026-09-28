@@ -53,6 +53,35 @@ the result envelope and document path are retained. `bodyContains` performs a
 case-sensitive substring search and does not require `includeBody`; it only
 returns the body when `includeBody` is also true.
 
+## Path rules and validation
+
+Put `.pathmatter.yaml` at the vault root to apply schemas to document paths.
+Rules use the same whole-path patterns as queries. For example:
+
+```yaml
+rules:
+  - match: "modules/{module}/projects/{project}/project.md"
+    entity: project
+    schema: project
+```
+
+`schema: project` reads `schemas/project.json` from the vault root. A
+vault-relative `.json` path also works. Schemas use JSON Schema Draft 2020-12;
+local JSON pointer `$ref` values are supported. The rule only applies to the
+matching `project.md`, not its sibling notes or assets. Documents without a
+matching rule are valid unless they have a parsing error.
+
+All matching schemas are applied. Conflicting `entity` or `template` values
+among rules matching a document are configuration errors. Queries include
+schema diagnostics with the document path, physical path, rule, schema, field,
+and error message. Invalid documents remain queryable by path and parsed
+frontmatter; unparseable frontmatter remains queryable by path.
+
+Run `pathmatter validate ./my-vault` to scan Markdown files and print a JSON
+array of documents with diagnostics. It exits with status 1 when violations are
+found, 0 when the vault passes, and 2 for invalid configuration or arguments.
+The Python equivalent is `validate_vault(vault_root)`.
+
 ## Development
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). This project targets the latest stable Python 3.14 patch release. From the project root, install Python and create the environment:

@@ -9,6 +9,7 @@ from pathlib import Path
 from .documents import read_document
 from .filters import FilterError, matches, uses_only_system_fields, validate_filter
 from .patterns import PathPattern, PatternError, validate_relative_directory
+from .rules import RuleConfigError, load_rules
 
 
 class QueryError(ValueError):
@@ -78,6 +79,10 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
     if root.is_symlink() or not root.is_dir():
         raise QueryError("vault root must be an existing, non-symlink directory")
     root = root.absolute()
+    try:
+        rules = load_rules(root)
+    except RuleConfigError as error:
+        raise QueryError(str(error)) from error
     scoped_path = root.joinpath(*directory.split("/")) if directory else root
     if scoped_path.is_symlink() or not scoped_path.is_dir():
         raise QueryError("scope directory must be an existing, non-symlink directory")
@@ -113,6 +118,10 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
                 include_absolute_path=query.get("includeAbsolutePath", False),
             )
             document["params"] = captures
+            try:
+                document["diagnostics"].extend(rules.diagnostics(document, physical))
+            except RuleConfigError as error:
+                raise QueryError(str(error)) from error
             if not _matches_where(document, relative, captures, where):
                 continue
             if body_contains is not None and body_contains not in document.get(
@@ -300,7 +309,10 @@ def _remove_projected(target, dotted):
 def _matches_where(document, path, captures, where):
     if not where:
         return True
-    if document["diagnostics"] and not uses_only_system_fields(where):
+    if any(
+        diagnostic["code"] in ("read_error", "frontmatter_parse_error")
+        for diagnostic in document["diagnostics"]
+    ) and not uses_only_system_fields(where):
         return False
     segments = path.split("/")
     location = {
