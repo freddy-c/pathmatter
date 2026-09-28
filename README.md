@@ -122,6 +122,39 @@ pathmatter delete ./my-vault --input '{"path":"projects/demo/project.md"}'
 
 The Python equivalent is `delete_document(vault_root, {"path": "..."})`.
 
+## Local ChatGPT desktop MCP server
+
+The `pathmatter-mcp` command starts a local STDIO server bound to one vault. It
+exposes `query_documents`, `get_document`, `create_document`, `update_document`,
+and `delete_document`. The vault path is set when the server starts, not supplied
+by tool calls. Deletes move files to the recoverable trash described above.
+
+```sh
+uv sync
+.venv/bin/pathmatter-mcp /absolute/path/to/my-vault
+```
+
+The command waits for an MCP client on standard input; run it from ChatGPT
+desktop rather than typing into it directly. In **Settings → MCP servers**, add a
+server named `pathmatter`, choose **STDIO**, set the command to this project's
+absolute `.venv/bin/pathmatter-mcp` path, and pass the vault's absolute path as
+its argument. Save and restart the server. Type `/mcp` in the composer to check
+that the five tools are available.
+
+For explicit approval of write tools, configure the same server in
+`~/.codex/config.toml` with `default_tools_approval_mode = "writes"`:
+
+```toml
+[mcp_servers.pathmatter]
+command = "/absolute/path/to/pathmatter/.venv/bin/pathmatter-mcp"
+args = ["/absolute/path/to/my-vault"]
+default_tools_approval_mode = "writes"
+```
+
+The server is local to the computer running ChatGPT desktop. A remote ChatGPT
+connection would require a reachable MCP endpoint or a private tunnel and
+appropriate authentication; the CRUD operations can remain the same.
+
 ## Development
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). This project targets the latest stable Python 3.14 patch release. From the project root, install Python and create the environment:

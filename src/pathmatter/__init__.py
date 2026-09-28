@@ -2,7 +2,7 @@
 
 __version__ = "0.1.0"
 
-from .query import QueryError, query_documents
+from .query import QueryError, get_document, query_documents
 from .validation import validate_vault
 from .writes import (
     WriteError,
@@ -19,6 +19,7 @@ __all__ = [
     "WriteValidationError",
     "create_document",
     "delete_document",
+    "get_document",
     "preview_document",
     "query_documents",
     "update_document",

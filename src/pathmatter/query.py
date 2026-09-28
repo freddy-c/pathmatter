@@ -8,13 +8,48 @@ from pathlib import Path
 
 from .documents import read_document
 from .filters import FilterError, matches, uses_only_system_fields, validate_filter
-from .patterns import PathPattern, PatternError, validate_relative_directory
+from .patterns import (
+    PathPattern,
+    PatternError,
+    validate_document_path,
+    validate_relative_directory,
+)
 from .rules import RuleConfigError, load_rules
 from .writes import TRASH_DIRECTORY
 
 
 class QueryError(ValueError):
     """Invalid query or vault configuration."""
+
+
+def get_document(vault_root: str | Path, path: str) -> dict:
+    """Read one vault-relative Markdown document, including its body."""
+    try:
+        validate_document_path(path)
+    except PatternError as error:
+        raise QueryError(str(error)) from error
+    if path.split("/", 1)[0] == TRASH_DIRECTORY:
+        raise QueryError("the Pathmatter trash directory is not queryable")
+    root = Path(vault_root)
+    if root.is_symlink() or not root.is_dir():
+        raise QueryError("vault root must be an existing, non-symlink directory")
+    root = root.absolute()
+    target = root
+    for part in path.split("/"):
+        target = target / part
+        if target.is_symlink():
+            raise QueryError("document path must not pass through a symlink")
+    if not target.is_file():
+        raise QueryError(f"document does not exist: {path}")
+    try:
+        rules = load_rules(root)
+        document = read_document(
+            target, path, include_body=True, include_absolute_path=False
+        )
+        document["diagnostics"].extend(rules.diagnostics(document, target))
+    except RuleConfigError as error:
+        raise QueryError(str(error)) from error
+    return document
 
 
 def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list[dict]:
