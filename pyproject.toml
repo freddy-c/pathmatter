@@ -8,3 +8,7 @@ version = "0.1.0"
 description = "A query language for filesystem Markdown and frontmatter"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
+dependencies = ["pyyaml>=6.0.2,<7"]
+
+[project.scripts]
+pathmatter = "pathmatter.cli:main"
