@@ -154,32 +154,130 @@ class QueryTests(unittest.TestCase):
 
     def test_mongodb_style_predicates(self):
         def paths(where):
-            return [item["path"] for item in query_documents(self.root, {"where": where})]
+            return [
+                item["path"] for item in query_documents(self.root, {"where": where})
+            ]
 
         target = "modules/x/tasks/nested-fields.md"
         self.assertEqual(paths({"teacher.name": "Ada"}), [target])
         self.assertEqual(paths({"score": {"$gte": 3}}), [target])
         self.assertEqual(paths({"tags": "math"}), [target])
         self.assertEqual(paths({"values": {"$in": [2, 4]}}), [target])
-        self.assertEqual(paths({"steps": {"$elemMatch": {"kind": "write", "done": False}}}), [target])
-        self.assertEqual(paths({"steps": {"$elemMatch": {"kind": "read", "done": False}}}), [])
-        self.assertEqual(paths({"$and": [{"score": {"$gt": 2}}, {"$or": [{"title": "Nested"}, {"title": "Other"}]}]}), [target])
+        self.assertEqual(
+            paths({"steps": {"$elemMatch": {"kind": "write", "done": False}}}), [target]
+        )
+        self.assertEqual(
+            paths({"steps": {"$elemMatch": {"kind": "read", "done": False}}}), []
+        )
+        self.assertEqual(
+            paths(
+                {
+                    "$and": [
+                        {"score": {"$gt": 2}},
+                        {"$or": [{"title": "Nested"}, {"title": "Other"}]},
+                    ]
+                }
+            ),
+            [target],
+        )
         self.assertNotIn(target, paths({"$not": {"title": "Nested"}}))
         self.assertEqual(paths({"missingNull": None}), [target])
         self.assertEqual(paths({"absent": None}), [])
         self.assertIn(target, paths({"absent": {"$ne": "x"}}))
         self.assertEqual(paths({"score": {"$gte": "3"}}), [])
-        self.assertEqual(query_documents(self.root, {"path": "modules/{module}/tasks/nested-fields.md", "where": {"$params.module": "x", "$filename": "nested-fields.md", "$directory": "modules/x/tasks"}})[0]["path"], target)
+        self.assertEqual(
+            query_documents(
+                self.root,
+                {
+                    "path": "modules/{module}/tasks/nested-fields.md",
+                    "where": {
+                        "$params.module": "x",
+                        "$filename": "nested-fields.md",
+                        "$directory": "modules/x/tasks",
+                    },
+                },
+            )[0]["path"],
+            target,
+        )
 
     def test_bad_frontmatter_only_matches_system_filters(self):
-        system = query_documents(self.root, {"path": "**/bad.md", "where": {"$filename": "bad.md"}})
+        system = query_documents(
+            self.root, {"path": "**/bad.md", "where": {"$filename": "bad.md"}}
+        )
         self.assertEqual(len(system), 1)
-        self.assertEqual(query_documents(self.root, {"path": "**/bad.md", "where": {"status": {"$ne": "done"}}}), [])
+        self.assertEqual(
+            query_documents(
+                self.root, {"path": "**/bad.md", "where": {"status": {"$ne": "done"}}}
+            ),
+            [],
+        )
 
     def test_rejects_unsupported_filter_shapes(self):
-        for where in ({"$wat": []}, {"score": {"$in": "not-an-array"}}, {"$or": {"x": 1}}, {"x": {"$exists": 1}}):
+        for where in (
+            {"$wat": []},
+            {"score": {"$in": "not-an-array"}},
+            {"$or": {"x": 1}},
+            {"x": {"$exists": 1}},
+        ):
             with self.subTest(where=where), self.assertRaises(QueryError):
                 query_documents(self.root, {"where": where})
+
+    def test_projection_sort_skip_and_limit(self):
+        results = query_documents(
+            self.root,
+            {
+                "path": "**/tasks/*.md",
+                "sort": {"status": 1, "$path": -1},
+                "skip": 1,
+                "limit": 2,
+                "projection": {"status": 1, "$params.module": 1},
+            },
+        )
+        self.assertEqual(
+            [item["path"] for item in results],
+            ["modules/x/tasks/scalar.md", "modules/x/tasks/nested-fields.md"],
+        )
+        self.assertEqual(results[0]["frontmatter"], {})
+        self.assertNotIn("title", results[1]["frontmatter"])
+        nested = query_documents(
+            self.root,
+            {
+                "path": "**/nested-fields.md",
+                "projection": {"teacher.name": 1},
+            },
+        )
+        self.assertEqual(nested[0]["frontmatter"], {"teacher": {"name": "Ada"}})
+
+    def test_sort_mixed_types_and_missing_values(self):
+        results = query_documents(self.root, {"sort": {"score": 1}})
+        paths = [item["path"] for item in results]
+        self.assertLess(
+            paths.index("modules/x/project.md"),
+            paths.index("modules/x/tasks/nested-fields.md"),
+        )
+
+    def test_body_contains_and_projection_exclusion(self):
+        result = query_documents(
+            self.root,
+            {
+                "bodyContains": "Still readable",
+                "projection": {"status": 0},
+            },
+        )
+        self.assertEqual([item["path"] for item in result], ["modules/x/tasks/bad.md"])
+        self.assertNotIn("body", result[0])
+        self.assertEqual(result[0]["diagnostics"][0]["code"], "frontmatter_parse_error")
+
+    def test_query_option_validation(self):
+        for query in (
+            {"sort": {"title": 0}},
+            {"skip": -1},
+            {"limit": True},
+            {"projection": {"title": 1, "status": 0}},
+            {"bodyContains": 1},
+        ):
+            with self.subTest(query=query), self.assertRaises(QueryError):
+                query_documents(self.root, query)
 
     def test_cli_json_query(self):
         command = [
