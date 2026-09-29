@@ -159,10 +159,10 @@ appropriate authentication; the CRUD operations can remain the same.
 
 ## Development
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/). This project targets the latest stable Python 3.14 patch release. From the project root, install Python and create the environment:
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/). This project targets Python 3.13. From the project root, install Python and create the environment:
 
 ```sh
-uv python install 3.14
+uv python install 3.13
 uv sync
 ```
 
