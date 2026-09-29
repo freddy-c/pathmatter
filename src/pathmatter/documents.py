@@ -43,7 +43,8 @@ def read_document(
         result["absolutePath"] = str(path.absolute())
     if source is None:
         try:
-            source = path.read_text(encoding="utf-8-sig")
+            # Preserve physical newlines so indexed excerpts are exact source slices.
+            source = path.read_bytes().decode("utf-8-sig")
         except (OSError, UnicodeError) as error:
             result["diagnostics"].append({"code": "read_error", "message": str(error)})
             if include_body:

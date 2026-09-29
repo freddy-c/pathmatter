@@ -16,6 +16,7 @@ dependencies = [
     "mcp>=1.26,<2",
     "onnxruntime==1.23.1; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "pyyaml>=6.0.2,<7",
+    "semantic-text-splitter>=0.32,<1",
 ]
 
 [project.scripts]
