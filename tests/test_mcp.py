@@ -28,6 +28,14 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(tools["get_document"].annotations.readOnlyHint)
             self.assertFalse(tools["create_document"].annotations.readOnlyHint)
             self.assertTrue(tools["delete_document"].annotations.destructiveHint)
+            query_help = tools["query_documents"].description
+            for syntax in (
+                '`{"query": { ... }}`',
+                "`$elemMatch`",
+                "`$params.<name>`",
+                "`bodyContains`",
+            ):
+                self.assertIn(syntax, query_help)
 
             params = StdioServerParameters(
                 command=sys.executable,
@@ -36,8 +44,11 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             async with stdio_client(params) as (reader, writer):
                 async with ClientSession(reader, writer) as session:
                     await session.initialize()
-                    listed = {tool.name for tool in (await session.list_tools()).tools}
-                    self.assertEqual(listed, set(tools))
+                    listed = {tool.name: tool for tool in (await session.list_tools()).tools}
+                    self.assertEqual(set(listed), set(tools))
+                    self.assertEqual(
+                        listed["query_documents"].description, query_help
+                    )
 
                     created = await session.call_tool(
                         "create_document",

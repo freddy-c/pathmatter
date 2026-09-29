@@ -128,6 +128,8 @@ The `pathmatter-mcp` command starts a local STDIO server bound to one vault. It
 exposes `query_documents`, `get_document`, `create_document`, `update_document`,
 and `delete_document`. The vault path is set when the server starts, not supplied
 by tool calls. Deletes move files to the recoverable trash described above.
+The `query_documents` tool description includes the query language reference and
+examples, so MCP clients receive the syntax when they list the available tools.
 
 ```sh
 uv sync

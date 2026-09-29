@@ -11,6 +11,7 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from .query import QueryError, get_document, query_documents
+from .query_reference import QUERY_LANGUAGE_REFERENCE
 from .writes import (
     WriteError,
     WriteValidationError,
@@ -39,6 +40,7 @@ def build_server(vault_root: str | Path) -> FastMCP:
         "pathmatter",
         instructions=(
             "Read and write Markdown documents only in the configured vault. "
+            "The query_documents tool description is the query language reference. "
             "Use get_document before updating or deleting a specific document. "
             "Create and update validate path rules and schemas. "
             "Delete moves a document to recoverable vault-local trash."
@@ -48,7 +50,7 @@ def build_server(vault_root: str | Path) -> FastMCP:
     @server.tool(
         name="query_documents",
         title="Query documents",
-        description="Find Markdown documents by vault-relative path, frontmatter, or body text.",
+        description=QUERY_LANGUAGE_REFERENCE,
         annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
     )
     def query_documents_tool(query: dict[str, Any]) -> dict[str, Any]:
