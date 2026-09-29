@@ -22,6 +22,26 @@ class QueryError(ValueError):
     """Invalid query or vault configuration."""
 
 
+def _iter_markdown_files(root: Path, scoped_path: Path, mode: str = "descendants"):
+    """Yield the ordinary Markdown files visible to Pathmatter."""
+    for parent, directories, filenames in os.walk(scoped_path, followlinks=False):
+        directories[:] = sorted(
+            name
+            for name in directories
+            if not (Path(parent) / name).is_symlink()
+            and not (Path(parent) == root and name == TRASH_DIRECTORY)
+        )
+        if mode == "children":
+            directories.clear()
+        for filename in sorted(filenames):
+            if not filename.endswith(".md"):
+                continue
+            physical = Path(parent) / filename
+            if physical.is_symlink() or not physical.is_file():
+                continue
+            yield physical, physical.relative_to(root).as_posix()
+
+
 def get_document(vault_root: str | Path, path: str) -> dict:
     """Read one vault-relative Markdown document, including its body."""
     try:
@@ -132,44 +152,29 @@ def query_documents(vault_root: str | Path, query: Mapping[str, object]) -> list
             raise QueryError("scope directory must not pass through a symlink")
 
     documents = []
-    for parent, directories, filenames in os.walk(scoped_path, followlinks=False):
-        directories[:] = sorted(
-            name
-            for name in directories
-            if not (Path(parent) / name).is_symlink()
-            and not (Path(parent) == root and name == TRASH_DIRECTORY)
+    for physical, relative in _iter_markdown_files(root, scoped_path, mode):
+        captures = pattern.match(relative) if pattern else {}
+        if captures is None:
+            continue
+        document = read_document(
+            physical,
+            relative,
+            include_body=query.get("includeBody", False)
+            or body_contains is not None,
+            include_absolute_path=query.get("includeAbsolutePath", False),
         )
-        if mode == "children":
-            directories.clear()
-        for filename in sorted(filenames):
-            if not filename.endswith(".md"):
-                continue
-            physical = Path(parent) / filename
-            if physical.is_symlink() or not physical.is_file():
-                continue
-            relative = physical.relative_to(root).as_posix()
-            captures = pattern.match(relative) if pattern else {}
-            if captures is None:
-                continue
-            document = read_document(
-                physical,
-                relative,
-                include_body=query.get("includeBody", False)
-                or body_contains is not None,
-                include_absolute_path=query.get("includeAbsolutePath", False),
-            )
-            document["params"] = captures
-            try:
-                document["diagnostics"].extend(rules.diagnostics(document, physical))
-            except RuleConfigError as error:
-                raise QueryError(str(error)) from error
-            if not _matches_where(document, relative, captures, where):
-                continue
-            if body_contains is not None and body_contains not in document.get(
-                "body", ""
-            ):
-                continue
-            documents.append(document)
+        document["params"] = captures
+        try:
+            document["diagnostics"].extend(rules.diagnostics(document, physical))
+        except RuleConfigError as error:
+            raise QueryError(str(error)) from error
+        if not _matches_where(document, relative, captures, where):
+            continue
+        if body_contains is not None and body_contains not in document.get(
+            "body", ""
+        ):
+            continue
+        documents.append(document)
     documents.sort(key=lambda document: document["path"])
     for field, direction in reversed(sort):
         documents.sort(
