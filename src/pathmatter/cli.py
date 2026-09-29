@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .query import QueryError, query_documents
+from .search import SearchError, index_vault, search_notes
 from .validation import validate_vault
 from .writes import (
     WriteError,
@@ -29,6 +30,15 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--query-file", help="JSON file, or - for standard input")
     validate_parser = commands.add_parser("validate", help="validate Markdown files in a vault")
     validate_parser.add_argument("vault", type=Path)
+    search_parser = commands.add_parser("search", help="search Markdown note bodies")
+    search_parser.add_argument("vault", type=Path)
+    search_parser.add_argument("--text", required=True)
+    search_parser.add_argument("--mode", choices=("semantic", "lexical", "hybrid"), required=True)
+    search_parser.add_argument("--scope", help="optional Pathmatter query object as JSON")
+    search_parser.add_argument("--limit", type=int, default=8)
+    index_parser = commands.add_parser("index", help="refresh the local search index")
+    index_parser.add_argument("vault", type=Path)
+    index_parser.add_argument("--rebuild", action="store_true")
     for name in ("preview", "create", "update", "delete"):
         write_parser = commands.add_parser(name, help=f"{name} a Markdown document")
         write_parser.add_argument("vault", type=Path)
@@ -39,6 +49,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "validate":
             result = validate_vault(args.vault)
+        elif args.command == "index":
+            result = index_vault(args.vault, rebuild=args.rebuild)
+        elif args.command == "search":
+            scope = json.loads(args.scope) if args.scope is not None else None
+            result = search_notes(args.vault, args.text, args.mode, scope, args.limit)
         elif args.command == "query":
             if args.query is not None:
                 raw = args.query
@@ -76,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         sys.stdout.write("\n")
         return 2
-    except (OSError, UnicodeError, json.JSONDecodeError, QueryError) as error:
+    except (OSError, UnicodeError, json.JSONDecodeError, QueryError, SearchError) as error:
         parser.error(str(error))
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")

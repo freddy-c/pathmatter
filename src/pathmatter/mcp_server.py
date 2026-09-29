@@ -12,6 +12,7 @@ from mcp.types import ToolAnnotations
 
 from .query import QueryError, get_document, query_documents
 from .query_reference import QUERY_LANGUAGE_REFERENCE
+from .search import SearchError, search_notes
 from .writes import (
     WriteError,
     WriteValidationError,
@@ -26,7 +27,7 @@ def _call(operation: Callable[[], Any]) -> Any:
         return operation()
     except WriteValidationError as error:
         raise ToolError(json.dumps({"diagnostics": error.preview["diagnostics"]})) from error
-    except (QueryError, WriteError) as error:
+    except (QueryError, SearchError, WriteError) as error:
         raise ToolError(str(error)) from error
 
 
@@ -41,6 +42,7 @@ def build_server(vault_root: str | Path) -> FastMCP:
         instructions=(
             "Read and write Markdown documents only in the configured vault. "
             "The query_documents tool description is the query language reference. "
+            "Use search_notes to retrieve relevant body passages. "
             "Use get_document before updating or deleting a specific document. "
             "Create and update validate path rules and schemas. "
             "Delete moves a document to recoverable vault-local trash."
@@ -64,6 +66,26 @@ def build_server(vault_root: str | Path) -> FastMCP:
     )
     def get_document_tool(path: str) -> dict[str, Any]:
         return _call(lambda: get_document(root, path))
+
+    @server.tool(
+        name="search_notes",
+        title="Search note bodies",
+        description=(
+            "Search Markdown bodies in this vault. Choose semantic, lexical, or hybrid mode. "
+            "Optional scope is a Pathmatter query object using path, scope, where, or "
+            "bodyContains; matching full vault-relative paths restrict retrieval. "
+            "Returns excerpts with 1-based line numbers within each body. "
+            "The local index refreshes selected files before searching."
+        ),
+        annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+    )
+    def search_notes_tool(
+        text: str,
+        mode: str,
+        scope: dict[str, Any] | None = None,
+        limit: int = 8,
+    ) -> dict[str, Any]:
+        return _call(lambda: search_notes(root, text, mode, scope, limit))
 
     @server.tool(
         name="create_document",

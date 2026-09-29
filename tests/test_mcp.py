@@ -20,12 +20,14 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "query_documents",
                     "get_document",
+                    "search_notes",
                     "create_document",
                     "update_document",
                     "delete_document",
                 },
             )
             self.assertTrue(tools["get_document"].annotations.readOnlyHint)
+            self.assertTrue(tools["search_notes"].annotations.readOnlyHint)
             self.assertFalse(tools["create_document"].annotations.readOnlyHint)
             self.assertTrue(tools["delete_document"].annotations.destructiveHint)
             query_help = tools["query_documents"].description
@@ -111,4 +113,4 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn("title", invalid.content[0].text)
                     self.assertFalse((root / "project.md").exists())
 
-            self.assertEqual(len(await server.list_tools()), 5)
+            self.assertEqual(len(await server.list_tools()), 6)

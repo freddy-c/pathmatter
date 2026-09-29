@@ -122,11 +122,47 @@ pathmatter delete ./my-vault --input '{"path":"projects/demo/project.md"}'
 
 The Python equivalent is `delete_document(vault_root, {"path": "..."})`.
 
+## Local note search
+
+Search Markdown bodies with semantic, lexical, or hybrid retrieval. The first
+search builds a local index; later searches hash the files being searched and
+refresh changed notes. This includes edits made in Obsidian or through
+Pathmatter. Whole-vault searches also remove deleted or renamed paths. The
+Markdown files remain authoritative, and `index --rebuild` recreates their
+search entries. The local MiniLM embedding model downloads on first use.
+
+```sh
+pathmatter search ./my-vault --text "storage decision" --mode hybrid
+pathmatter search ./my-vault --text "storage" --mode lexical --scope '{"path":"projects/*.md","where":{"status":"active"}}' --limit 5
+pathmatter index ./my-vault
+pathmatter index ./my-vault --rebuild
+```
+
+An MCP agent can call `search_notes` with the same `text`, `mode`, optional
+`scope` query object, and `limit` (1–20). The scope accepts `path`, `scope`,
+`where`, and `bodyContains` from the query language above. Pathmatter resolves
+it first; retrieval is then restricted to those exact vault-relative paths.
+With no scope, the whole vault is searched. For example:
+
+```json
+{"text":"storage decision","mode":"hybrid","scope":{"path":"projects/*.md","where":{"status":"active"}},"limit":5}
+```
+
+Each result has `path`, `heading`, `bodyStartLine`, `bodyEndLine`, `excerpt`,
+`retrievalMode`, and `distance` (semantic) or `score` (lexical or hybrid).
+Lines are 1-based within the Markdown body, after frontmatter. Chunks are
+packed from consecutive Markdown blocks with `semantic-text-splitter`; short
+notes stay in one chunk. Hybrid uses reciprocal rank fusion of semantic and
+SQLite FTS5 lexical rankings. Scores from different modes are not directly
+comparable. The rebuildable index lives in the user cache directory outside
+the vault (`~/Library/Caches/pathmatter` on macOS, `$XDG_CACHE_HOME/pathmatter`
+or `~/.cache/pathmatter` elsewhere). Set `PATHMATTER_INDEX_HOME` to move it.
+
 ## Local ChatGPT desktop MCP server
 
 The `pathmatter-mcp` command starts a local STDIO server bound to one vault. It
-exposes `query_documents`, `get_document`, `create_document`, `update_document`,
-and `delete_document`. The vault path is set when the server starts, not supplied
+exposes `query_documents`, `get_document`, `search_notes`, `create_document`,
+`update_document`, and `delete_document`. The vault path is set when the server starts, not supplied
 by tool calls. Deletes move files to the recoverable trash described above.
 The `query_documents` tool description includes the query language reference and
 examples, so MCP clients receive the syntax when they list the available tools.
@@ -141,7 +177,7 @@ desktop rather than typing into it directly. In **Settings → MCP servers**, ad
 server named `pathmatter`, choose **STDIO**, set the command to this project's
 absolute `.venv/bin/pathmatter-mcp` path, and pass the vault's absolute path as
 its argument. Save and restart the server. Type `/mcp` in the composer to check
-that the five tools are available.
+that the six tools are available.
 
 For explicit approval of write tools, configure the same server in
 `~/.codex/config.toml` with `default_tools_approval_mode = "writes"`:
